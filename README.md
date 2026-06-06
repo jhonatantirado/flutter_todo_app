@@ -6,15 +6,16 @@ A lightweight task management app built with Flutter. Create, organise, and trac
 
 ## Overview
 
-The Todo App lets you manage tasks with a simple, focused interface. Each task has three pieces of information: a **title**, a **description**, and a **status**. Statuses progress from **Pending** through **In Progress** to **Done**, giving you a clear picture of where everything stands at a glance.
+The Todo App lets you manage tasks with a simple, focused interface. Each task has four pieces of information: a **title**, a **description**, a **status**, and an optional **target date**. Statuses progress from **Pending** through **In Progress** to **Done**, giving you a clear picture of where everything stands at a glance.
 
 ### What you can do
 
-- **Add tasks** — tap *New task* to open a form, fill in the title, an optional description, and an initial status.
-- **Update tasks** — change a task's status inline via the dropdown on each card, or tap the edit icon to update any field.
+- **Add tasks** — tap *New task* to open a form, fill in the title, an optional description, an initial status, and an optional target date.
+- **Update tasks** — change a task's status inline via the dropdown on each card, or tap the edit icon to update any field including the target date.
 - **Complete tasks** — tap the circle on the left of any card to toggle it between Pending and Done. Completed tasks are visually struck through and dimmed.
 - **Delete tasks** — tap the trash icon to permanently remove a task.
 - **Filter tasks** — use the chip bar at the top to show All tasks or narrow the view to Pending, In Progress, or Done.
+- **Track deadlines** — tasks with a target date show a calendar icon and the date on the card. Tasks whose target date has passed and are not yet Done are highlighted in red with an "Overdue" badge.
 - **Persist across sessions** — all tasks are saved locally using SQLite, so nothing is lost when you close the app.
 
 ---
@@ -149,10 +150,10 @@ lib/
 ### Layers
 
 **Model (`models/`):**  
-`Todo` is a plain Dart class with `toMap()` / `fromMap()` methods for SQLite serialization and a `copyWith()` method for immutable-style updates. `TodoStatus` is an enum with an extension that maps each case to a display label and a stored string value.
+`Todo` is a plain Dart class with five fields: `id`, `title`, `description`, `status`, and `targetDate`. `toMap()` / `fromMap()` handle SQLite serialization, and `copyWith()` enables immutable-style updates. Because `targetDate` is optional (`DateTime?`), `copyWith()` uses a private `const _KeepDate` sentinel as the default so callers can explicitly pass `null` to clear the date without it being confused with "not provided". `TodoStatus` is an enum with an extension that maps each case to a display label and a stored string value.
 
 **Data (`data/`):**  
-`DatabaseHelper` is a singleton that owns the SQLite connection via the `sqflite` package. It exposes five methods — `insertTodo`, `getAllTodos`, `updateTodo`, `deleteTodo`, and `close` — and hides all SQL from the rest of the app. The database is created lazily on first access.
+`DatabaseHelper` is a singleton that owns the SQLite connection via the `sqflite` package. It exposes five methods — `insertTodo`, `getAllTodos`, `updateTodo`, `deleteTodo`, and `close` — and hides all SQL from the rest of the app. The database is created lazily on first access. Schema migrations are handled via the `onUpgrade` callback; upgrading from version 1 to 2 adds the `target_date` column to existing installations.
 
 **Screens (`screens/`):**  
 `TodoListScreen` is the single screen. It is a `StatefulWidget` that holds the in-memory list of todos, the active filter, and the loading flag. It is responsible for calling `DatabaseHelper` and updating state via `setState`. All mutations follow the same pattern: await the database operation, then update the in-memory list.
@@ -194,9 +195,12 @@ CREATE TABLE todos (
   title       TEXT    NOT NULL,
   description TEXT    NOT NULL DEFAULT '',
   status      TEXT    NOT NULL DEFAULT 'pending',
+  target_date TEXT,
   created_at  TEXT    NOT NULL
 );
 ```
+
+`target_date` is stored as an ISO 8601 string (e.g. `2025-12-31T00:00:00.000`) or SQL NULL when no date has been set. The column was added in schema version 2 via a migration; existing rows receive NULL automatically.
 
 ### State management
 
