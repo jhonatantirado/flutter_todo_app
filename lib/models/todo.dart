@@ -35,11 +35,19 @@ extension TodoStatusExtension on TodoStatus {
   }
 }
 
+// Private const sentinel used by copyWith to distinguish
+// "leave targetDate unchanged" from "explicitly set to null".
+class _KeepDate {
+  const _KeepDate();
+}
+const _keepDate = _KeepDate();
+
 class Todo {
-  final int? id; // nullable — null until inserted into DB
+  final int? id;
   String title;
   String description;
   TodoStatus status;
+  DateTime? targetDate;
   final DateTime createdAt;
 
   Todo({
@@ -47,6 +55,7 @@ class Todo {
     required this.title,
     required this.description,
     required this.status,
+    this.targetDate,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -55,6 +64,7 @@ class Todo {
     String? title,
     String? description,
     TodoStatus? status,
+    Object? targetDate = _keepDate, // const default — satisfies Dart's requirement
     DateTime? createdAt,
   }) {
     return Todo(
@@ -62,6 +72,7 @@ class Todo {
       title: title ?? this.title,
       description: description ?? this.description,
       status: status ?? this.status,
+      targetDate: targetDate is _KeepDate ? this.targetDate : targetDate as DateTime?,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -72,6 +83,7 @@ class Todo {
       'title': title,
       'description': description,
       'status': status.value,
+      'target_date': targetDate?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -82,6 +94,9 @@ class Todo {
       title: map['title'] as String,
       description: map['description'] as String,
       status: TodoStatusExtension.fromValue(map['status'] as String),
+      targetDate: map['target_date'] != null
+          ? DateTime.parse(map['target_date'] as String)
+          : null,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }

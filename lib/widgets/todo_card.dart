@@ -44,12 +44,22 @@ class TodoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDone = todo.status == TodoStatus.done;
+    final isOverdue = todo.targetDate != null &&
+        !isDone &&
+        todo.targetDate!.isBefore(
+          DateTime.now().copyWith(hour: 0, minute: 0, second: 0, millisecond: 0),
+        );
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8E6DF), width: 0.5),
+        border: Border.all(
+          color: isOverdue
+              ? const Color(0xFFF5C0C0)
+              : const Color(0xFFE8E6DF),
+          width: isOverdue ? 1.0 : 0.5,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -77,8 +87,7 @@ class TodoCard extends StatelessWidget {
                   ),
                 ),
                 child: isDone
-                    ? const Icon(Icons.check,
-                        size: 13, color: Colors.white)
+                    ? const Icon(Icons.check, size: 13, color: Colors.white)
                     : null,
               ),
             ),
@@ -112,6 +121,54 @@ class TodoCard extends StatelessWidget {
                         ),
                       ),
                     ],
+
+                    // Target date chip
+                    if (todo.targetDate != null) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.calendar_today_outlined,
+                            size: 12,
+                            color: isOverdue
+                                ? const Color(0xFFA32D2D)
+                                : const Color(0xFF888780),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _formatDate(todo.targetDate!),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: isOverdue
+                                  ? const Color(0xFFA32D2D)
+                                  : const Color(0xFF888780),
+                            ),
+                          ),
+                          if (isOverdue) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFDE8E8),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'Overdue',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFA32D2D),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+
                     const SizedBox(height: 10),
                     Row(
                       children: [
@@ -164,23 +221,29 @@ class TodoCard extends StatelessWidget {
   }
 }
 
+String _formatDate(DateTime d) {
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+  return '${months[d.month - 1]} ${d.day}, ${d.year}';
+}
+
 class _StatusDropdown extends StatelessWidget {
   final TodoStatus current;
   final ValueChanged<TodoStatus> onChanged;
 
-  const _StatusDropdown(
-      {required this.current, required this.onChanged});
+  const _StatusDropdown({required this.current, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: const Color(0xFFF5F4F0),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-            color: const Color(0xFFD3D1C7), width: 0.5),
+        border:
+            Border.all(color: const Color(0xFFD3D1C7), width: 0.5),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<TodoStatus>(

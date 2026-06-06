@@ -24,8 +24,6 @@ class _TodoListScreenState extends State<TodoListScreen> {
     _loadTodos();
   }
 
-  // ── Data helpers ────────────────────────────────────────────────────────────
-
   Future<void> _loadTodos() async {
     final todos = await _db.getAllTodos();
     if (mounted) setState(() { _todos = todos; _loading = false; });
@@ -36,18 +34,15 @@ class _TodoListScreenState extends State<TodoListScreen> {
     return _todos.where((t) => t.status == _filterStatus).toList();
   }
 
-  Future<void> _addTodo(
-      String title, String description, TodoStatus status) async {
+  Future<void> _addTodo(String title, String description, TodoStatus status, DateTime? targetDate) async {
     final inserted = await _db.insertTodo(
-      Todo(title: title, description: description, status: status),
+      Todo(title: title, description: description, status: status, targetDate: targetDate),
     );
     setState(() => _todos.insert(0, inserted));
   }
 
-  Future<void> _updateTodo(
-      Todo original, String title, String description, TodoStatus status) async {
-    final updated =
-        original.copyWith(title: title, description: description, status: status);
+  Future<void> _updateTodo(Todo original, String title, String description, TodoStatus status, DateTime? targetDate) async {
+    final updated = original.copyWith(title: title, description: description, status: status, targetDate: targetDate);
     await _db.updateTodo(updated);
     setState(() {
       final idx = _todos.indexWhere((t) => t.id == original.id);
@@ -57,9 +52,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
 
   Future<void> _toggleDone(Todo todo) async {
     final updated = todo.copyWith(
-      status: todo.status == TodoStatus.done
-          ? TodoStatus.pending
-          : TodoStatus.done,
+      status: todo.status == TodoStatus.done ? TodoStatus.pending : TodoStatus.done,
     );
     await _db.updateTodo(updated);
     setState(() {
@@ -81,8 +74,6 @@ class _TodoListScreenState extends State<TodoListScreen> {
     await _db.deleteTodo(todo.id!);
     setState(() => _todos.removeWhere((t) => t.id == todo.id));
   }
-
-  // ── Sheets ──────────────────────────────────────────────────────────────────
 
   void _openAddSheet() {
     showModalBottomSheet(
@@ -106,12 +97,10 @@ class _TodoListScreenState extends State<TodoListScreen> {
       ),
       builder: (_) => TodoFormSheet(
         todo: todo,
-        onSave: (title, desc, status) => _updateTodo(todo, title, desc, status),
+        onSave: (title, desc, status, targetDate) => _updateTodo(todo, title, desc, status, targetDate),
       ),
     );
   }
-
-  // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -126,20 +115,12 @@ class _TodoListScreenState extends State<TodoListScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Jhonatan Tasks',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1A1A1A),
-              ),
+              'My Tasks',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: Color(0xFF1A1A1A)),
             ),
             Text(
               '${_todos.length} ${_todos.length == 1 ? 'task' : 'tasks'}',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
-                color: Color(0xFF888780),
-              ),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: Color(0xFF888780)),
             ),
           ],
         ),
@@ -153,13 +134,9 @@ class _TodoListScreenState extends State<TodoListScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF1A1A1A),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                textStyle:
-                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
               ),
             ),
           ),
@@ -170,7 +147,6 @@ class _TodoListScreenState extends State<TodoListScreen> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Filter chips
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                   child: SingleChildScrollView(
@@ -180,16 +156,14 @@ class _TodoListScreenState extends State<TodoListScreen> {
                         _FilterChip(
                           label: 'All',
                           selected: _filterStatus == null,
-                          onTap: () =>
-                              setState(() => _filterStatus = null),
+                          onTap: () => setState(() => _filterStatus = null),
                         ),
                         const SizedBox(width: 6),
                         for (final s in TodoStatus.values) ...[
                           _FilterChip(
                             label: s.label,
                             selected: _filterStatus == s,
-                            onTap: () =>
-                                setState(() => _filterStatus = s),
+                            onTap: () => setState(() => _filterStatus = s),
                           ),
                           const SizedBox(width: 6),
                         ],
@@ -197,40 +171,29 @@ class _TodoListScreenState extends State<TodoListScreen> {
                     ),
                   ),
                 ),
-
-                // Task list
                 Expanded(
                   child: filtered.isEmpty
                       ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.check_box_outline_blank,
-                                  size: 48, color: Colors.grey.shade300),
+                              Icon(Icons.check_box_outline_blank, size: 48, color: Colors.grey.shade300),
                               const SizedBox(height: 12),
-                              Text(
-                                'No tasks here yet',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  color: Colors.grey.shade400,
-                                ),
-                              ),
+                              Text('No tasks here yet',
+                                  style: TextStyle(fontSize: 15, color: Colors.grey.shade400)),
                             ],
                           ),
                         )
                       : ListView.separated(
-                          padding:
-                              const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
                           itemCount: filtered.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 8),
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             final todo = filtered[index];
                             return TodoCard(
                               todo: todo,
                               onDelete: () => _deleteTodo(todo),
-                              onStatusChanged: (s) =>
-                                  _changeStatus(todo, s),
+                              onStatusChanged: (s) => _changeStatus(todo, s),
                               onToggleDone: () => _toggleDone(todo),
                               onEdit: () => _openEditSheet(todo),
                             );
@@ -243,18 +206,12 @@ class _TodoListScreenState extends State<TodoListScreen> {
   }
 }
 
-// ── Filter chip ────────────────────────────────────────────────────────────────
-
 class _FilterChip extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
-  const _FilterChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
+  const _FilterChip({required this.label, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -262,15 +219,12 @@ class _FilterChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
           color: selected ? const Color(0xFF1A1A1A) : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected
-                ? const Color(0xFF1A1A1A)
-                : const Color(0xFFD3D1C7),
+            color: selected ? const Color(0xFF1A1A1A) : const Color(0xFFD3D1C7),
             width: 0.5,
           ),
         ),

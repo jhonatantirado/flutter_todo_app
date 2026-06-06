@@ -4,10 +4,9 @@ import '../models/todo.dart';
 
 class DatabaseHelper {
   static const _dbName = 'todos.db';
-  static const _dbVersion = 1;
+  static const _dbVersion = 2; // bumped from 1 → 2 for target_date migration
   static const _tableName = 'todos';
 
-  // Singleton
   DatabaseHelper._();
   static final DatabaseHelper instance = DatabaseHelper._();
 
@@ -25,24 +24,35 @@ class DatabaseHelper {
       path,
       version: _dbVersion,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
+  // Called once on a fresh install.
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
       CREATE TABLE $_tableName (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        title      TEXT    NOT NULL,
-        description TEXT   NOT NULL DEFAULT '',
-        status     TEXT    NOT NULL DEFAULT 'pending',
-        created_at TEXT    NOT NULL
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        title       TEXT    NOT NULL,
+        description TEXT    NOT NULL DEFAULT '',
+        status      TEXT    NOT NULL DEFAULT 'pending',
+        target_date TEXT,
+        created_at  TEXT    NOT NULL
       )
     ''');
   }
 
-  // ── CRUD ────────────────────────────────────────────────────────────────────
+  // Called when an existing install upgrades from an older schema version.
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Version 1 → 2: add the target_date column.
+      // Existing rows get NULL automatically (no target date set).
+      await db.execute(
+        'ALTER TABLE $_tableName ADD COLUMN target_date TEXT',
+      );
+    }
+  }
 
-  /// Insert a new Todo and return it with the DB-assigned id.
   Future<Todo> insertTodo(Todo todo) async {
     final db = await database;
     final id = await db.insert(
@@ -53,29 +63,12 @@ class DatabaseHelper {
     return todo.copyWith(id: id);
   }
 
-  /// Fetch all todos ordered by most-recently created first.
   Future<List<Todo>> getAllTodos() async {
     final db = await database;
-    final rows = await db.query(
-      _tableName,
-      orderBy: 'created_at DESC',
-    );
+    final rows = await db.query(_tableName, orderBy: 'created_at DESC');
     return rows.map(Todo.fromMap).toList();
   }
 
-  /// Fetch todos filtered by status.
-  Future<List<Todo>> getTodosByStatus(TodoStatus status) async {
-    final db = await database;
-    final rows = await db.query(
-      _tableName,
-      where: 'status = ?',
-      whereArgs: [status.value],
-      orderBy: 'created_at DESC',
-    );
-    return rows.map(Todo.fromMap).toList();
-  }
-
-  /// Update title, description and status of an existing todo.
   Future<void> updateTodo(Todo todo) async {
     assert(todo.id != null, 'Cannot update a Todo without an id');
     final db = await database;
@@ -87,17 +80,11 @@ class DatabaseHelper {
     );
   }
 
-  /// Delete a todo by id.
   Future<void> deleteTodo(int id) async {
     final db = await database;
-    await db.delete(
-      _tableName,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete(_tableName, where: 'id = ?', whereArgs: [id]);
   }
 
-  /// Close the database (call on app teardown if needed).
   Future<void> close() async {
     final db = await database;
     await db.close();
