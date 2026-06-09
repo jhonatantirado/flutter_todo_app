@@ -31,6 +31,7 @@ class TodoCard extends StatelessWidget {
   final VoidCallback onToggleDone;
   final ValueChanged<TodoStatus> onStatusChanged;
   final VoidCallback onEdit;
+  final String searchQuery; // empty string when no search is active
 
   const TodoCard({
     super.key,
@@ -39,6 +40,7 @@ class TodoCard extends StatelessWidget {
     required this.onToggleDone,
     required this.onStatusChanged,
     required this.onEdit,
+    this.searchQuery = '',
   });
 
   @override
@@ -55,9 +57,7 @@ class TodoCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isOverdue
-              ? const Color(0xFFF5C0C0)
-              : const Color(0xFFE8E6DF),
+          color: isOverdue ? const Color(0xFFF5C0C0) : const Color(0xFFE8E6DF),
           width: isOverdue ? 1.0 : 0.5,
         ),
       ),
@@ -76,13 +76,9 @@ class TodoCard extends StatelessWidget {
                 margin: const EdgeInsets.only(top: 2),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: isDone
-                      ? const Color(0xFF1A1A1A)
-                      : Colors.transparent,
+                  color: isDone ? const Color(0xFF1A1A1A) : Colors.transparent,
                   border: Border.all(
-                    color: isDone
-                        ? const Color(0xFF1A1A1A)
-                        : const Color(0xFFB4B2A9),
+                    color: isDone ? const Color(0xFF1A1A1A) : const Color(0xFFB4B2A9),
                     width: 1.5,
                   ),
                 ),
@@ -100,20 +96,24 @@ class TodoCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      todo.title,
+                    // Title — with optional highlight
+                    _HighlightText(
+                      text: todo.title,
+                      query: searchQuery,
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
                         color: const Color(0xFF1A1A1A),
-                        decoration:
-                            isDone ? TextDecoration.lineThrough : null,
+                        decoration: isDone ? TextDecoration.lineThrough : null,
                       ),
                     ),
+
+                    // Description — with optional highlight
                     if (todo.description.isNotEmpty) ...[
                       const SizedBox(height: 3),
-                      Text(
-                        todo.description,
+                      _HighlightText(
+                        text: todo.description,
+                        query: searchQuery,
                         style: const TextStyle(
                           fontSize: 13,
                           color: Color(0xFF888780),
@@ -122,7 +122,7 @@ class TodoCard extends StatelessWidget {
                       ),
                     ],
 
-                    // Target date chip
+                    // Target date
                     if (todo.targetDate != null) ...[
                       const SizedBox(height: 6),
                       Row(
@@ -149,8 +149,7 @@ class TodoCard extends StatelessWidget {
                           if (isOverdue) ...[
                             const SizedBox(width: 4),
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 1),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFFDE8E8),
                                 borderRadius: BorderRadius.circular(4),
@@ -174,8 +173,7 @@ class TodoCard extends StatelessWidget {
                       children: [
                         // Status badge
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 3),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                           decoration: BoxDecoration(
                             color: todo.status.badgeBackground,
                             borderRadius: BorderRadius.circular(20),
@@ -191,17 +189,12 @@ class TodoCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-
-                        // Status dropdown
                         _StatusDropdown(
                           current: todo.status,
                           onChanged: onStatusChanged,
                         ),
-
                         const Spacer(),
-
-                        _IconBtn(
-                            icon: Icons.edit_outlined, onTap: onEdit),
+                        _IconBtn(icon: Icons.edit_outlined, onTap: onEdit),
                         const SizedBox(width: 4),
                         _IconBtn(
                           icon: Icons.delete_outline,
@@ -220,6 +213,61 @@ class TodoCard extends StatelessWidget {
     );
   }
 }
+
+// ── Highlight widget ───────────────────────────────────────────────────────────
+
+/// Renders [text] with every occurrence of [query] highlighted in amber.
+/// Falls back to a plain Text widget when [query] is empty.
+class _HighlightText extends StatelessWidget {
+  final String text;
+  final String query;
+  final TextStyle style;
+
+  const _HighlightText({
+    required this.text,
+    required this.query,
+    required this.style,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (query.isEmpty) return Text(text, style: style);
+
+    final lowerText = text.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+    final spans = <TextSpan>[];
+    int start = 0;
+
+    while (true) {
+      final matchIndex = lowerText.indexOf(lowerQuery, start);
+      if (matchIndex == -1) {
+        // Append remaining text
+        spans.add(TextSpan(text: text.substring(start)));
+        break;
+      }
+      // Text before the match
+      if (matchIndex > start) {
+        spans.add(TextSpan(text: text.substring(start, matchIndex)));
+      }
+      // The matched portion — highlighted
+      spans.add(TextSpan(
+        text: text.substring(matchIndex, matchIndex + query.length),
+        style: const TextStyle(
+          backgroundColor: Color(0xFFFFF0A0),
+          color: Color(0xFF1A1A1A),
+          fontWeight: FontWeight.w600,
+        ),
+      ));
+      start = matchIndex + query.length;
+    }
+
+    return RichText(
+      text: TextSpan(style: style, children: spans),
+    );
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 String _formatDate(DateTime d) {
   const months = [
@@ -242,8 +290,7 @@ class _StatusDropdown extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFF5F4F0),
         borderRadius: BorderRadius.circular(6),
-        border:
-            Border.all(color: const Color(0xFFD3D1C7), width: 0.5),
+        border: Border.all(color: const Color(0xFFD3D1C7), width: 0.5),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<TodoStatus>(
@@ -254,11 +301,9 @@ class _StatusDropdown extends StatelessWidget {
             color: Color(0xFF888780),
             fontWeight: FontWeight.w500,
           ),
-          icon: const Icon(Icons.expand_more,
-              size: 14, color: Color(0xFF888780)),
+          icon: const Icon(Icons.expand_more, size: 14, color: Color(0xFF888780)),
           items: TodoStatus.values
-              .map((s) =>
-                  DropdownMenuItem(value: s, child: Text(s.label)))
+              .map((s) => DropdownMenuItem(value: s, child: Text(s.label)))
               .toList(),
           onChanged: (s) {
             if (s != null) onChanged(s);
