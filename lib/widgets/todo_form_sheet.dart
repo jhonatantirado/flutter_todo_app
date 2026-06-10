@@ -7,6 +7,7 @@ class TodoFormSheet extends StatefulWidget {
     String title,
     String description,
     TodoStatus status,
+    TodoPriority priority,
     DateTime? targetDate,
   ) onSave;
 
@@ -20,15 +21,17 @@ class _TodoFormSheetState extends State<TodoFormSheet> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _descCtrl;
   late TodoStatus _status;
+  late TodoPriority _priority;
   DateTime? _targetDate;
 
   @override
   void initState() {
     super.initState();
-    _titleCtrl = TextEditingController(text: widget.todo?.title ?? '');
-    _descCtrl = TextEditingController(text: widget.todo?.description ?? '');
-    _status = widget.todo?.status ?? TodoStatus.pending;
-    _targetDate = widget.todo?.targetDate;
+    _titleCtrl   = TextEditingController(text: widget.todo?.title ?? '');
+    _descCtrl    = TextEditingController(text: widget.todo?.description ?? '');
+    _status      = widget.todo?.status   ?? TodoStatus.pending;
+    _priority    = widget.todo?.priority ?? TodoPriority.medium;
+    _targetDate  = widget.todo?.targetDate;
   }
 
   @override
@@ -64,7 +67,7 @@ class _TodoFormSheetState extends State<TodoFormSheet> {
   void _save() {
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) return;
-    widget.onSave(title, _descCtrl.text.trim(), _status, _targetDate);
+    widget.onSave(title, _descCtrl.text.trim(), _status, _priority, _targetDate);
     Navigator.pop(context);
   }
 
@@ -73,9 +76,8 @@ class _TodoFormSheetState extends State<TodoFormSheet> {
     final isEdit = widget.todo != null;
 
     return Padding(
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -87,16 +89,12 @@ class _TodoFormSheetState extends State<TodoFormSheet> {
                 Text(
                   isEdit ? 'Edit task' : 'New task',
                   style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1A1A1A),
-                  ),
+                      fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFF1A1A1A)),
                 ),
                 const Spacer(),
                 GestureDetector(
                   onTap: () => Navigator.pop(context),
-                  child:
-                      const Icon(Icons.close, color: Color(0xFF888780)),
+                  child: const Icon(Icons.close, color: Color(0xFF888780)),
                 ),
               ],
             ),
@@ -122,31 +120,39 @@ class _TodoFormSheetState extends State<TodoFormSheet> {
             ),
             const SizedBox(height: 16),
 
-            _FieldLabel('Status'),
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(
-                    color: const Color(0xFFD3D1C7), width: 0.5),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<TodoStatus>(
-                  value: _status,
-                  isExpanded: true,
-                  style: const TextStyle(
-                      fontSize: 14, color: Color(0xFF1A1A1A)),
-                  items: TodoStatus.values
-                      .map((s) => DropdownMenuItem(
-                          value: s, child: Text(s.label)))
-                      .toList(),
-                  onChanged: (s) {
-                    if (s != null) setState(() => _status = s);
-                  },
+            // Status + Priority side by side
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _FieldLabel('Status'),
+                      const SizedBox(height: 6),
+                      _DropdownField<TodoStatus>(
+                        value: _status,
+                        items: TodoStatus.values,
+                        labelOf: (s) => s.label,
+                        onChanged: (s) { if (s != null) setState(() => _status = s); },
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _FieldLabel('Priority'),
+                      const SizedBox(height: 6),
+                      _PriorityDropdown(
+                        value: _priority,
+                        onChanged: (p) { if (p != null) setState(() => _priority = p); },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
 
@@ -155,12 +161,10 @@ class _TodoFormSheetState extends State<TodoFormSheet> {
             GestureDetector(
               onTap: _pickDate,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 13),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  border: Border.all(
-                      color: const Color(0xFFD3D1C7), width: 0.5),
+                  border: Border.all(color: const Color(0xFFD3D1C7), width: 0.5),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -201,8 +205,7 @@ class _TodoFormSheetState extends State<TodoFormSheet> {
                   backgroundColor: const Color(0xFF1A1A1A),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                      borderRadius: BorderRadius.circular(10)),
                   textStyle: const TextStyle(
                       fontSize: 15, fontWeight: FontWeight.w500),
                 ),
@@ -218,30 +221,136 @@ class _TodoFormSheetState extends State<TodoFormSheet> {
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle:
-          const TextStyle(color: Color(0xFFB4B2A9), fontSize: 14),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      hintStyle: const TextStyle(color: Color(0xFFB4B2A9), fontSize: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide:
-            const BorderSide(color: Color(0xFFD3D1C7), width: 0.5),
+        borderSide: const BorderSide(color: Color(0xFFD3D1C7), width: 0.5),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide:
-            const BorderSide(color: Color(0xFFD3D1C7), width: 0.5),
+        borderSide: const BorderSide(color: Color(0xFFD3D1C7), width: 0.5),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide:
-            const BorderSide(color: Color(0xFF1A1A1A), width: 1.0),
+        borderSide: const BorderSide(color: Color(0xFF1A1A1A), width: 1.0),
       ),
       filled: true,
       fillColor: Colors.white,
     );
   }
 }
+
+// ── Generic dropdown field ────────────────────────────────────────────────────
+
+class _DropdownField<T> extends StatelessWidget {
+  final T value;
+  final List<T> items;
+  final String Function(T) labelOf;
+  final ValueChanged<T?> onChanged;
+
+  const _DropdownField({
+    required this.value,
+    required this.items,
+    required this.labelOf,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFD3D1C7), width: 0.5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isExpanded: true,
+          style: const TextStyle(fontSize: 14, color: Color(0xFF1A1A1A)),
+          items: items
+              .map((i) => DropdownMenuItem(value: i, child: Text(labelOf(i))))
+              .toList(),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Priority dropdown with colour indicators ──────────────────────────────────
+
+class _PriorityDropdown extends StatelessWidget {
+  final TodoPriority value;
+  final ValueChanged<TodoPriority?> onChanged;
+
+  const _PriorityDropdown({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFD3D1C7), width: 0.5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<TodoPriority>(
+          value: value,
+          isExpanded: true,
+          style: const TextStyle(fontSize: 14, color: Color(0xFF1A1A1A)),
+          items: TodoPriority.values.map((p) {
+            return DropdownMenuItem(
+              value: p,
+              child: Row(
+                children: [
+                  _PriorityDot(priority: p),
+                  const SizedBox(width: 8),
+                  Text(p.label),
+                ],
+              ),
+            );
+          }).toList(),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Shared priority dot ───────────────────────────────────────────────────────
+
+class _PriorityDot extends StatelessWidget {
+  final TodoPriority priority;
+  final double size;
+
+  const _PriorityDot({required this.priority, this.size = 8});
+
+  static Color colorOf(TodoPriority p) {
+    switch (p) {
+      case TodoPriority.high:   return const Color(0xFFA32D2D);
+      case TodoPriority.medium: return const Color(0xFFEF9F27);
+      case TodoPriority.low:    return const Color(0xFF639922);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: colorOf(priority),
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 String _formatDate(DateTime d) {
   const months = [

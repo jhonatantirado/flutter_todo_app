@@ -4,7 +4,7 @@ import '../models/todo.dart';
 
 class DatabaseHelper {
   static const _dbName = 'todos.db';
-  static const _dbVersion = 2; // bumped from 1 → 2 for target_date migration
+  static const _dbVersion = 3; // v1→v2: target_date  |  v2→v3: priority
   static const _tableName = 'todos';
 
   DatabaseHelper._();
@@ -28,7 +28,6 @@ class DatabaseHelper {
     );
   }
 
-  // Called once on a fresh install.
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
       CREATE TABLE $_tableName (
@@ -36,19 +35,23 @@ class DatabaseHelper {
         title       TEXT    NOT NULL,
         description TEXT    NOT NULL DEFAULT '',
         status      TEXT    NOT NULL DEFAULT 'pending',
+        priority    TEXT    NOT NULL DEFAULT 'medium',
         target_date TEXT,
         created_at  TEXT    NOT NULL
       )
     ''');
   }
 
-  // Called when an existing install upgrades from an older schema version.
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // Version 1 → 2: add the target_date column.
-      // Existing rows get NULL automatically (no target date set).
       await db.execute(
         'ALTER TABLE $_tableName ADD COLUMN target_date TEXT',
+      );
+    }
+    if (oldVersion < 3) {
+      // Existing rows get 'medium' as their default priority.
+      await db.execute(
+        "ALTER TABLE $_tableName ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium'",
       );
     }
   }

@@ -6,7 +6,7 @@ import '../widgets/todo_form_sheet.dart';
 
 // ── Sort options ───────────────────────────────────────────────────────────────
 
-enum SortField { createdAt, targetDate, title }
+enum SortField { createdAt, targetDate, title, priority }
 enum SortDirection { asc, desc }
 
 class SortOption {
@@ -24,6 +24,8 @@ class SortOption {
         return 'Target date $dir';
       case SortField.title:
         return 'Title $dir';
+      case SortField.priority:
+        return 'Priority $dir';
     }
   }
 
@@ -120,20 +122,22 @@ class _TodoListScreenState extends State<TodoListScreen> {
           if (a.targetDate == null) return 1;
           if (b.targetDate == null) return -1;
           cmp = a.targetDate!.compareTo(b.targetDate!);
+        case SortField.priority:
+          cmp = a.priority.weight.compareTo(b.priority.weight);
       }
       return asc ? cmp : -cmp;
     });
   }
 
-  Future<void> _addTodo(String title, String description, TodoStatus status, DateTime? targetDate) async {
+  Future<void> _addTodo(String title, String description, TodoStatus status, TodoPriority priority, DateTime? targetDate) async {
     final inserted = await _db.insertTodo(
-      Todo(title: title, description: description, status: status, targetDate: targetDate),
+      Todo(title: title, description: description, status: status, priority: priority, targetDate: targetDate),
     );
     setState(() => _todos.insert(0, inserted));
   }
 
-  Future<void> _updateTodo(Todo original, String title, String description, TodoStatus status, DateTime? targetDate) async {
-    final updated = original.copyWith(title: title, description: description, status: status, targetDate: targetDate);
+  Future<void> _updateTodo(Todo original, String title, String description, TodoStatus status, TodoPriority priority, DateTime? targetDate) async {
+    final updated = original.copyWith(title: title, description: description, status: status, priority: priority, targetDate: targetDate);
     await _db.updateTodo(updated);
     setState(() {
       final idx = _todos.indexWhere((t) => t.id == original.id);
@@ -298,8 +302,8 @@ class _TodoListScreenState extends State<TodoListScreen> {
       ),
       builder: (_) => TodoFormSheet(
         todo: todo,
-        onSave: (title, desc, status, targetDate) =>
-            _updateTodo(todo, title, desc, status, targetDate),
+        onSave: (title, desc, status, priority, targetDate) =>
+            _updateTodo(todo, title, desc, status, priority, targetDate),
       ),
     );
   }
@@ -621,6 +625,13 @@ class _SortSheetState extends State<_SortSheet> {
             selected: _field == SortField.title,
             onTap: () => setState(() => _field = SortField.title),
           ),
+          const SizedBox(height: 8),
+          _OptionRow(
+            label: 'Priority',
+            icon: Icons.flag_outlined,
+            selected: _field == SortField.priority,
+            onTap: () => setState(() => _field = SortField.priority),
+          ),
           const SizedBox(height: 20),
 
           // Direction options
@@ -630,7 +641,7 @@ class _SortSheetState extends State<_SortSheet> {
             children: [
               Expanded(
                 child: _DirectionButton(
-                  label: _field == SortField.title ? 'A → Z' : 'Oldest first',
+                  label: _field == SortField.title ? 'A → Z' : _field == SortField.priority ? 'Low → High' : 'Oldest first',
                   icon: Icons.arrow_upward,
                   selected: _direction == SortDirection.asc,
                   onTap: () => setState(() => _direction = SortDirection.asc),
@@ -639,7 +650,7 @@ class _SortSheetState extends State<_SortSheet> {
               const SizedBox(width: 10),
               Expanded(
                 child: _DirectionButton(
-                  label: _field == SortField.title ? 'Z → A' : 'Newest first',
+                  label: _field == SortField.title ? 'Z → A' : _field == SortField.priority ? 'High → Low' : 'Newest first',
                   icon: Icons.arrow_downward,
                   selected: _direction == SortDirection.desc,
                   onTap: () => setState(() => _direction = SortDirection.desc),

@@ -96,18 +96,6 @@ class TodoCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title — with optional highlight
-                    _HighlightText(
-                      text: todo.title,
-                      query: searchQuery,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF1A1A1A),
-                        decoration: isDone ? TextDecoration.lineThrough : null,
-                      ),
-                    ),
-
                     // Description — with optional highlight
                     if (todo.description.isNotEmpty) ...[
                       const SizedBox(height: 3),
@@ -209,6 +197,64 @@ class TodoCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Priority badge ────────────────────────────────────────────────────────────
+
+class _PriorityBadge extends StatelessWidget {
+  final TodoPriority priority;
+
+  const _PriorityBadge({required this.priority});
+
+  static Color _bg(TodoPriority p) {
+    switch (p) {
+      case TodoPriority.high:   return const Color(0xFFFDE8E8);
+      case TodoPriority.medium: return const Color(0xFFFAEEDA);
+      case TodoPriority.low:    return const Color(0xFFEAF3DE);
+    }
+  }
+
+  static Color _fg(TodoPriority p) {
+    switch (p) {
+      case TodoPriority.high:   return const Color(0xFFA32D2D);
+      case TodoPriority.medium: return const Color(0xFFEF9F27);
+      case TodoPriority.low:    return const Color(0xFF639922);
+    }
+  }
+
+  static IconData _icon(TodoPriority p) {
+    switch (p) {
+      case TodoPriority.high:   return Icons.keyboard_double_arrow_up_rounded;
+      case TodoPriority.medium: return Icons.remove_rounded;
+      case TodoPriority.low:    return Icons.keyboard_double_arrow_down_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: _bg(priority),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(_icon(priority), size: 12, color: _fg(priority)),
+          const SizedBox(width: 3),
+          Text(
+            priority.label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: _fg(priority),
+            ),
+          ),
+        ],
       ),
     );
   }
