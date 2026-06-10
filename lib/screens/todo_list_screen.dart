@@ -4,6 +4,35 @@ import '../models/todo.dart';
 import '../widgets/todo_card.dart';
 import '../widgets/todo_form_sheet.dart';
 
+// ── Sort options ───────────────────────────────────────────────────────────────
+
+enum SortField { createdAt, targetDate, title }
+enum SortDirection { asc, desc }
+
+class SortOption {
+  final SortField field;
+  final SortDirection direction;
+
+  const SortOption(this.field, this.direction);
+
+  String get label {
+    final dir = direction == SortDirection.asc ? '↑' : '↓';
+    switch (field) {
+      case SortField.createdAt:
+        return 'Date created $dir';
+      case SortField.targetDate:
+        return 'Target date $dir';
+      case SortField.title:
+        return 'Title $dir';
+    }
+  }
+
+  // Default: newest first
+  static const defaultOption = SortOption(SortField.createdAt, SortDirection.desc);
+}
+
+// ── Screen ─────────────────────────────────────────────────────────────────────
+
 class TodoListScreen extends StatefulWidget {
   const TodoListScreen({super.key});
 
@@ -21,6 +50,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
   String _searchQuery = '';
   bool _searchActive = false;
   bool _loading = true;
+  SortOption _sortOption = SortOption.defaultOption;
 
   @override
   void initState() {
@@ -38,7 +68,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
     super.dispose();
   }
 
-  // ── Data ─────────────────────────────────────────────────────────────────────
+  // ── Data ──────────────────────────────────────────────────────────────────────
 
   Future<void> _loadTodos() async {
     final todos = await _db.getAllTodos();
@@ -48,19 +78,39 @@ class _TodoListScreenState extends State<TodoListScreen> {
   List<Todo> get _filteredTodos {
     Iterable<Todo> result = _todos;
 
-    // Apply status filter
     if (_filterStatus != null) {
       result = result.where((t) => t.status == _filterStatus);
     }
 
-    // Apply search query — matches title or description, case-insensitive
     if (_searchQuery.isNotEmpty) {
       result = result.where((t) =>
           t.title.toLowerCase().contains(_searchQuery) ||
           t.description.toLowerCase().contains(_searchQuery));
     }
 
-    return result.toList();
+    final list = result.toList();
+    _applySort(list);
+    return list;
+  }
+
+  void _applySort(List<Todo> list) {
+    final asc = _sortOption.direction == SortDirection.asc;
+    list.sort((a, b) {
+      int cmp;
+      switch (_sortOption.field) {
+        case SortField.createdAt:
+          cmp = a.createdAt.compareTo(b.createdAt);
+        case SortField.title:
+          cmp = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+        case SortField.targetDate:
+          // Nulls always go to the end regardless of direction
+          if (a.targetDate == null && b.targetDate == null) return 0;
+          if (a.targetDate == null) return 1;
+          if (b.targetDate == null) return -1;
+          cmp = a.targetDate!.compareTo(b.targetDate!);
+      }
+      return asc ? cmp : -cmp;
+    });
   }
 
   Future<void> _addTodo(String title, String description, TodoStatus status, DateTime? targetDate) async {
@@ -108,17 +158,30 @@ class _TodoListScreenState extends State<TodoListScreen> {
 
   void _activateSearch() {
     setState(() => _searchActive = true);
-    // Delay focus so the widget is in the tree before requesting focus
     WidgetsBinding.instance.addPostFrameCallback((_) => _searchFocus.requestFocus());
   }
 
   void _deactivateSearch() {
     _searchCtrl.clear();
     _searchFocus.unfocus();
-    setState(() {
-      _searchActive = false;
-      _searchQuery = '';
-    });
+    setState(() { _searchActive = false; _searchQuery = ''; });
+  }
+
+  // ── Sort sheet ────────────────────────────────────────────────────────────────
+
+  void _openSortSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _SortSheet(
+        current: _sortOption,
+        onChanged: (opt) => setState(() => _sortOption = opt),
+      ),
+    );
   }
 
   // ── Sheets ────────────────────────────────────────────────────────────────────
@@ -153,6 +216,8 @@ class _TodoListScreenState extends State<TodoListScreen> {
 
   // ── Build ─────────────────────────────────────────────────────────────────────
 
+  bool get _isSortActive => _sortOption != SortOption.defaultOption;
+
   @override
   Widget build(BuildContext context) {
     final filtered = _filteredTodos;
@@ -162,7 +227,6 @@ class _TodoListScreenState extends State<TodoListScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFF5F4F0),
         elevation: 0,
-        // Swap between title and search bar
         title: _searchActive
             ? TextField(
                 controller: _searchCtrl,
@@ -199,16 +263,36 @@ class _TodoListScreenState extends State<TodoListScreen> {
                 ],
               ),
         actions: [
-          // Toggle search icon
           IconButton(
-            icon: Icon(
-              _searchActive ? Icons.search_off : Icons.search,
-              color: const Color(0xFF1A1A1A),
-            ),
+            icon: Icon(_searchActive ? Icons.search_off : Icons.search, color: const Color(0xFF1A1A1A)),
             tooltip: _searchActive ? 'Close search' : 'Search',
             onPressed: _searchActive ? _deactivateSearch : _activateSearch,
           ),
-          if (!_searchActive)
+          if (!_searchActive) ...[
+            // Sort button — badge dot when a non-default sort is active
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.sort, color: Color(0xFF1A1A1A)),
+                  tooltip: 'Sort',
+                  onPressed: _openSortSheet,
+                ),
+                if (_isSortActive)
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      width: 7,
+                      height: 7,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF378ADD),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: FilledButton.icon(
@@ -224,6 +308,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
                 ),
               ),
             ),
+          ],
         ],
       ),
       body: _loading
@@ -231,9 +316,9 @@ class _TodoListScreenState extends State<TodoListScreen> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Filter chips
+                // Filter chips + active sort label
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -257,7 +342,30 @@ class _TodoListScreenState extends State<TodoListScreen> {
                   ),
                 ),
 
-                // Search result count when query is active
+                // Active sort indicator
+                if (_isSortActive)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.sort, size: 13, color: Color(0xFF378ADD)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Sorted by: ${_sortOption.label}',
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF378ADD), fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () => setState(() => _sortOption = SortOption.defaultOption),
+                          child: const Icon(Icons.close, size: 13, color: Color(0xFF378ADD)),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                const SizedBox(height: 12),
+
+                // Search result count
                 if (_searchActive && _searchQuery.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
@@ -267,9 +375,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
                           : '${filtered.length} ${filtered.length == 1 ? 'result' : 'results'} for "$_searchQuery"',
                       style: TextStyle(
                         fontSize: 13,
-                        color: filtered.isEmpty
-                            ? Colors.grey.shade400
-                            : const Color(0xFF888780),
+                        color: filtered.isEmpty ? Colors.grey.shade400 : const Color(0xFF888780),
                       ),
                     ),
                   ),
@@ -282,17 +388,13 @@ class _TodoListScreenState extends State<TodoListScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                _searchQuery.isNotEmpty
-                                    ? Icons.search_off
-                                    : Icons.check_box_outline_blank,
+                                _searchQuery.isNotEmpty ? Icons.search_off : Icons.check_box_outline_blank,
                                 size: 48,
                                 color: Colors.grey.shade300,
                               ),
                               const SizedBox(height: 12),
                               Text(
-                                _searchQuery.isNotEmpty
-                                    ? 'No tasks match your search'
-                                    : 'No tasks here yet',
+                                _searchQuery.isNotEmpty ? 'No tasks match your search' : 'No tasks here yet',
                                 style: TextStyle(fontSize: 15, color: Colors.grey.shade400),
                               ),
                             ],
@@ -320,6 +422,240 @@ class _TodoListScreenState extends State<TodoListScreen> {
     );
   }
 }
+
+// ── Sort bottom sheet ──────────────────────────────────────────────────────────
+
+class _SortSheet extends StatefulWidget {
+  final SortOption current;
+  final ValueChanged<SortOption> onChanged;
+
+  const _SortSheet({required this.current, required this.onChanged});
+
+  @override
+  State<_SortSheet> createState() => _SortSheetState();
+}
+
+class _SortSheetState extends State<_SortSheet> {
+  late SortField _field;
+  late SortDirection _direction;
+
+  @override
+  void initState() {
+    super.initState();
+    _field = widget.current.field;
+    _direction = widget.current.direction;
+  }
+
+  void _apply() {
+    widget.onChanged(SortOption(_field, _direction));
+    Navigator.pop(context);
+  }
+
+  void _reset() {
+    widget.onChanged(SortOption.defaultOption);
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              const Text(
+                'Sort by',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFF1A1A1A)),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: const Icon(Icons.close, color: Color(0xFF888780)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Field options
+          _SectionLabel('Field'),
+          const SizedBox(height: 8),
+          _OptionRow(
+            label: 'Date created',
+            icon: Icons.access_time_outlined,
+            selected: _field == SortField.createdAt,
+            onTap: () => setState(() => _field = SortField.createdAt),
+          ),
+          const SizedBox(height: 8),
+          _OptionRow(
+            label: 'Target date',
+            icon: Icons.calendar_today_outlined,
+            selected: _field == SortField.targetDate,
+            onTap: () => setState(() => _field = SortField.targetDate),
+          ),
+          const SizedBox(height: 8),
+          _OptionRow(
+            label: 'Title',
+            icon: Icons.sort_by_alpha_outlined,
+            selected: _field == SortField.title,
+            onTap: () => setState(() => _field = SortField.title),
+          ),
+          const SizedBox(height: 20),
+
+          // Direction options
+          _SectionLabel('Direction'),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _DirectionButton(
+                  label: _field == SortField.title ? 'A → Z' : 'Oldest first',
+                  icon: Icons.arrow_upward,
+                  selected: _direction == SortDirection.asc,
+                  onTap: () => setState(() => _direction = SortDirection.asc),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _DirectionButton(
+                  label: _field == SortField.title ? 'Z → A' : 'Newest first',
+                  icon: Icons.arrow_downward,
+                  selected: _direction == SortDirection.desc,
+                  onTap: () => setState(() => _direction = SortDirection.desc),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Actions
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _reset,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: const BorderSide(color: Color(0xFFD3D1C7)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    foregroundColor: const Color(0xFF888780),
+                    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                  child: const Text('Reset'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _apply,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A1A1A),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                  child: const Text('Apply'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OptionRow extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _OptionRow({required this.label, required this.icon, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFF0F0EC) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? const Color(0xFF1A1A1A) : const Color(0xFFD3D1C7),
+            width: selected ? 1.0 : 0.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 17, color: selected ? const Color(0xFF1A1A1A) : const Color(0xFF888780)),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: selected ? const Color(0xFF1A1A1A) : const Color(0xFF444240),
+              ),
+            ),
+            const Spacer(),
+            if (selected) const Icon(Icons.check, size: 16, color: Color(0xFF1A1A1A)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DirectionButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _DirectionButton({required this.label, required this.icon, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF1A1A1A) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? const Color(0xFF1A1A1A) : const Color(0xFFD3D1C7),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 15, color: selected ? Colors.white : const Color(0xFF888780)),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: selected ? Colors.white : const Color(0xFF888780),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Filter chip ────────────────────────────────────────────────────────────────
 
 class _FilterChip extends StatelessWidget {
   final String label;
@@ -354,4 +690,16 @@ class _FilterChip extends StatelessWidget {
       ),
     );
   }
+}
+
+Widget _SectionLabel(String text) {
+  return Text(
+    text.toUpperCase(),
+    style: const TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      color: Color(0xFF888780),
+      letterSpacing: 0.6,
+    ),
+  );
 }
