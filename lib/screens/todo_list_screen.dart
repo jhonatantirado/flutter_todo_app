@@ -166,6 +166,84 @@ class _TodoListScreenState extends State<TodoListScreen> {
     setState(() => _todos.removeWhere((t) => t.id == todo.id));
   }
 
+  // ── Bulk actions ──────────────────────────────────────────────────────────────
+
+  int get _doneCount => _todos.where((t) => t.status == TodoStatus.done).length;
+
+  Future<void> _clearCompleted() async {
+    final completed = _todos.where((t) => t.status == TodoStatus.done).toList();
+    if (completed.isEmpty) return;
+
+    // Show confirmation dialog before deleting
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Clear completed tasks?',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Color(0xFF1A1A1A)),
+        ),
+        content: Text(
+          '${completed.length} completed ${completed.length == 1 ? 'task' : 'tasks'} will be permanently deleted.',
+          style: const TextStyle(fontSize: 14, color: Color(0xFF888780), height: 1.5),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: const BorderSide(color: Color(0xFFD3D1C7)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    foregroundColor: const Color(0xFF888780),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFA32D2D),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Delete'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    // Delete from DB in parallel, then remove from in-memory list
+    await Future.wait(completed.map((t) => _db.deleteTodo(t.id!)));
+    setState(() => _todos.removeWhere((t) => t.status == TodoStatus.done));
+
+    // Show undo snackbar
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${completed.length} completed ${completed.length == 1 ? 'task' : 'tasks'} deleted',
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          backgroundColor: const Color(0xFF1A1A1A),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   // ── Search ────────────────────────────────────────────────────────────────────
 
   void _activateSearch() {
@@ -306,6 +384,13 @@ class _TodoListScreenState extends State<TodoListScreen> {
                   ),
               ],
             ),
+            // Clear completed — only shown when there are done tasks
+            if (_doneCount > 0)
+              IconButton(
+                icon: const Icon(Icons.playlist_remove_rounded, color: Color(0xFF1A1A1A)),
+                tooltip: 'Clear completed ($_doneCount)',
+                onPressed: _clearCompleted,
+              ),
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: FilledButton.icon(
