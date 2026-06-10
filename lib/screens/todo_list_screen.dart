@@ -47,6 +47,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
 
   List<Todo> _todos = [];
   TodoStatus? _filterStatus;
+  bool _filterOverdue = false;
   String _searchQuery = '';
   bool _searchActive = false;
   bool _loading = true;
@@ -75,10 +76,21 @@ class _TodoListScreenState extends State<TodoListScreen> {
     if (mounted) setState(() { _todos = todos; _loading = false; });
   }
 
+  static bool _isOverdue(Todo t) {
+    if (t.targetDate == null || t.status == TodoStatus.done) return false;
+    final today = DateTime.now();
+    final todayMidnight = DateTime(today.year, today.month, today.day);
+    return t.targetDate!.isBefore(todayMidnight);
+  }
+
+  int get _overdueCount => _todos.where(_isOverdue).length;
+
   List<Todo> get _filteredTodos {
     Iterable<Todo> result = _todos;
 
-    if (_filterStatus != null) {
+    if (_filterOverdue) {
+      result = result.where(_isOverdue);
+    } else if (_filterStatus != null) {
       result = result.where((t) => t.status == _filterStatus);
     }
 
@@ -217,6 +229,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
   // ── Build ─────────────────────────────────────────────────────────────────────
 
   bool get _isSortActive => _sortOption != SortOption.defaultOption;
+  bool get _isFilterActive => _filterStatus != null || _filterOverdue;
 
   @override
   Widget build(BuildContext context) {
@@ -316,27 +329,47 @@ class _TodoListScreenState extends State<TodoListScreen> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Filter chips + active sort label
+                // Summary count bar
+                _SummaryBar(todos: _todos, isOverdue: _isOverdue),
+
+                // Filter chips
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
                         _FilterChip(
                           label: 'All',
-                          selected: _filterStatus == null,
-                          onTap: () => setState(() => _filterStatus = null),
+                          selected: !_isFilterActive,
+                          onTap: () => setState(() {
+                            _filterStatus = null;
+                            _filterOverdue = false;
+                          }),
                         ),
                         const SizedBox(width: 6),
                         for (final s in TodoStatus.values) ...[
                           _FilterChip(
                             label: s.label,
-                            selected: _filterStatus == s,
-                            onTap: () => setState(() => _filterStatus = s),
+                            selected: _filterStatus == s && !_filterOverdue,
+                            onTap: () => setState(() {
+                              _filterStatus = s;
+                              _filterOverdue = false;
+                            }),
                           ),
                           const SizedBox(width: 6),
                         ],
+                        // Overdue chip — only shown when there are overdue tasks
+                        if (_overdueCount > 0)
+                          _FilterChip(
+                            label: 'Overdue ($_overdueCount)',
+                            selected: _filterOverdue,
+                            isWarning: true,
+                            onTap: () => setState(() {
+                              _filterOverdue = !_filterOverdue;
+                              if (_filterOverdue) _filterStatus = null;
+                            }),
+                          ),
                       ],
                     ),
                   ),
@@ -660,34 +693,151 @@ class _DirectionButton extends StatelessWidget {
 class _FilterChip extends StatelessWidget {
   final String label;
   final bool selected;
+  final bool isWarning;
   final VoidCallback onTap;
 
-  const _FilterChip({required this.label, required this.selected, required this.onTap});
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.isWarning = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final Color activeColor = isWarning ? const Color(0xFFA32D2D) : const Color(0xFF1A1A1A);
+    final Color inactiveBorder = isWarning ? const Color(0xFFF5C0C0) : const Color(0xFFD3D1C7);
+    final Color inactiveText = isWarning ? const Color(0xFFA32D2D) : const Color(0xFF888780);
+    final Color inactiveBg = isWarning ? const Color(0xFFFDE8E8) : Colors.white;
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF1A1A1A) : Colors.white,
+          color: selected ? activeColor : inactiveBg,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected ? const Color(0xFF1A1A1A) : const Color(0xFFD3D1C7),
-            width: 0.5,
+            color: selected ? activeColor : inactiveBorder,
+            width: selected ? 1.0 : 0.5,
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: selected ? Colors.white : const Color(0xFF888780),
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isWarning) ...[
+              Icon(
+                Icons.warning_amber_rounded,
+                size: 12,
+                color: selected ? Colors.white : inactiveText,
+              ),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: selected ? Colors.white : inactiveText,
+              ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+
+// ── Summary bar ────────────────────────────────────────────────────────────────
+
+class _SummaryBar extends StatelessWidget {
+  final List<Todo> todos;
+  final bool Function(Todo) isOverdue;
+
+  const _SummaryBar({required this.todos, required this.isOverdue});
+
+  @override
+  Widget build(BuildContext context) {
+    if (todos.isEmpty) return const SizedBox.shrink();
+
+    final done = todos.where((t) => t.status == TodoStatus.done).length;
+    final inProgress = todos.where((t) => t.status == TodoStatus.inProgress).length;
+    final pending = todos.where((t) => t.status == TodoStatus.pending).length;
+    final overdue = todos.where(isOverdue).length;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE8E6DF), width: 0.5),
+      ),
+      child: Row(
+        children: [
+          _SummaryCell(count: pending, label: 'Pending', color: const Color(0xFFEF9F27)),
+          _Divider(),
+          _SummaryCell(count: inProgress, label: 'In Progress', color: const Color(0xFF378ADD)),
+          _Divider(),
+          _SummaryCell(count: done, label: 'Done', color: const Color(0xFF639922)),
+          if (overdue > 0) ...[
+            _Divider(),
+            _SummaryCell(count: overdue, label: 'Overdue', color: const Color(0xFFA32D2D)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryCell extends StatelessWidget {
+  final int count;
+  final String label;
+  final Color color;
+
+  const _SummaryCell({required this.count, required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$count',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: color,
+              height: 1.1,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Color(0xFF888780),
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Divider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 0.5,
+      height: 36,
+      color: const Color(0xFFE8E6DF),
+      margin: const EdgeInsets.symmetric(horizontal: 4),
     );
   }
 }
